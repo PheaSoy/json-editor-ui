@@ -37,7 +37,7 @@
   <script>
     const container = document.getElementById('editor');
     const editor = new JSONEditor(container, {
-      mode: 'tree',
+      mode: 'code',
       modes: ['code', 'form', 'text', 'tree', 'view'],
       onError: function (err) {
         document.getElementById('error').textContent = err.toString();
