@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Advanced JSON Editor</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- JSONEditor -->
+  <link href="https://cdn.jsdelivr.net/npm/jsoneditor@9.10.0/dist/jsoneditor.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/jsoneditor@9.10.0/dist/jsoneditor.min.js"></script>
+
+  <style>
+    #editor {
+      height: 400px;
+    }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen p-8">
+  <div class="max-w-5xl mx-auto bg-white rounded-2xl shadow p-6">
+    <h1 class="text-2xl font-bold mb-4 text-gray-700">Advanced JSON Viewer & Editor</h1>
+
+    <div id="editor" class="mb-4 border rounded-lg"></div>
+
+    <div class="flex flex-wrap gap-4 mb-4">
+      <button onclick="formatJSON()" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-md">Format & Validate</button>
+      <button onclick="getJSON()" class="bg-green-600 hover:bg-green-700 text-white font-semibold px-4 py-2 rounded-md">Get JSON (Alert)</button>
+      <button onclick="exportJSON()" class="bg-purple-600 hover:bg-purple-700 text-white font-semibold px-4 py-2 rounded-md">Export JSON</button>
+      <button onclick="saveToLocal()" class="bg-yellow-600 hover:bg-yellow-700 text-white font-semibold px-4 py-2 rounded-md">Save to Local Storage</button>
+      <button onclick="loadFromLocal()" class="bg-gray-700 hover:bg-gray-800 text-white font-semibold px-4 py-2 rounded-md">Load from Local Storage</button>
+      <button onclick="copyFormatted()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2 rounded-md">Copy Formatted JSON</button>
+    </div>
+
+    <pre id="output" class="bg-gray-100 p-4 rounded-md overflow-x-auto text-sm font-mono whitespace-pre-wrap border text-gray-800"></pre>
+    <div id="error" class="text-red-600 text-sm mt-2"></div>
+  </div>
+
+  <script>
+    const container = document.getElementById('editor');
+    const editor = new JSONEditor(container, {
+      mode: 'tree',
+      modes: ['code', 'form', 'text', 'tree', 'view'],
+      onError: function (err) {
+        document.getElementById('error').textContent = err.toString();
+      }
+    });
+
+    // Set default JSON
+    editor.set({
+      name: "ChatGPT",
+      type: "AI",
+      features: ["Edit", "Export", "Copy", "Save"]
+    });
+
+    function formatJSON() {
+      try {
+        const json = editor.get();
+        const pretty = JSON.stringify(json, null, 2);
+        document.getElementById('output').textContent = pretty;
+        document.getElementById('error').textContent = '';
+      } catch (e) {
+        document.getElementById('output').textContent = '';
+        document.getElementById('error').textContent = 'Error: ' + e.message;
+      }
+    }
+
+    function getJSON() {
+      try {
+        const json = editor.get();
+        alert('Valid JSON:\n' + JSON.stringify(json, null, 2));
+      } catch (e) {
+        alert('Invalid JSON:\n' + e.message);
+      }
+    }
+
+    function exportJSON() {
+      try {
+        const json = editor.get();
+        const blob = new Blob([JSON.stringify(json, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "data.json";
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        alert("Export failed: " + e.message);
+      }
+    }
+
+    function saveToLocal() {
+      try {
+        const json = editor.get();
+        localStorage.setItem("jsonData", JSON.stringify(json));
+        alert("JSON saved to local storage.");
+      } catch (e) {
+        alert("Save failed: " + e.message);
+      }
+    }
+
+    function loadFromLocal() {
+      const json = localStorage.getItem("jsonData");
+      if (json) {
+        try {
+          editor.set(JSON.parse(json));
+          alert("JSON loaded from local storage.");
+        } catch (e) {
+          alert("Load failed: Invalid JSON in storage.");
+        }
+      } else {
+        alert("No saved JSON found in local storage.");
+      }
+    }
+
+    function copyFormatted() {
+      const output = document.getElementById('output').textContent;
+      if (!output.trim()) {
+        alert("Nothing to copy. Format the JSON first.");
+        return;
+      }
+
+      navigator.clipboard.writeText(output)
+        .then(() => alert("Formatted JSON copied to clipboard!"))
+        .catch(err => alert("Copy failed: " + err));
+    }
+  </script>
+</body>
+</html>
