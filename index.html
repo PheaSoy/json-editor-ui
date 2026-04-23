@@ -2,126 +2,622 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Advanced JSON Editor</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JSON Editor — Dev Tools</title>
   <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- JSONEditor -->
   <link href="https://cdn.jsdelivr.net/npm/jsoneditor@9.10.0/dist/jsoneditor.min.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/jsoneditor@9.10.0/dist/jsoneditor.min.js"></script>
-
   <style>
-    #editor {
-      height: 400px;
-    }
+    html, body { height: 100%; overflow: hidden; }
+
+    /* JSONEditor fills its flex container */
+    #editor-container .jsoneditor       { height: 100% !important; }
+    #editor-container .jsoneditor-outer { height: calc(100% - 35px) !important; }
+
+    /* Highlight badges */
+    .hl-badge { transition: opacity .15s, transform .1s; cursor: pointer; user-select: none; }
+    .hl-badge:hover  { opacity: .8;  transform: scale(1.02); }
+    .hl-badge:active { transform: scale(.97); }
+
+    /* History entries */
+    .hist-entry { border-left: 2px solid transparent; transition: background .12s, border-color .12s; }
+    .hist-entry:hover  { background: rgba(255,255,255,.04); border-left-color: #374151; }
+    .hist-entry.active { background: rgba(99,102,241,.13); border-left-color: #6366f1; }
+    .hist-del { opacity: 0; transition: opacity .12s; }
+    .hist-entry:hover .hist-del { opacity: 1; }
+
+    /* History panel slide */
+    #hist-panel { transition: width .2s ease, min-width .2s ease; }
+    #hist-panel.collapsed { width: 0 !important; min-width: 0 !important; border: none !important; }
+
+    /* Kibana banner pulse on appear */
+    @keyframes kb-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+    #kibana-banner:not(.hidden) { animation: kb-in .2s ease; }
+
+    /* Thin scrollbars */
+    ::-webkit-scrollbar       { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #4b5563; }
   </style>
 </head>
-<body class="bg-gray-100 min-h-screen p-8">
-  <div class="max-w-5xl mx-auto bg-white rounded-2xl shadow p-6">
-    <h1 class="text-2xl font-bold mb-4 text-gray-700">Advanced JSON Viewer & Editor</h1>
+<body class="flex flex-col bg-gray-900 text-gray-200" style="height:100vh;overflow:hidden">
 
-    <div id="editor" class="mb-4 border rounded-lg"></div>
+<!-- ── TOP BAR ───────────────────────────────────────────────────────────────── -->
+<header class="flex items-center gap-3 px-4 flex-shrink-0 bg-gray-800 border-b border-gray-700 z-10"
+        style="height:44px">
+  <button onclick="toggleHistory()" title="Toggle history  Ctrl+H"
+          class="p-1.5 rounded text-gray-400 hover:text-white hover:bg-gray-700 transition-colors flex-shrink-0">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+      <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+    </svg>
+  </button>
+  <span class="text-sm font-bold text-white whitespace-nowrap">JSON Viewer &amp; Editor</span>
+  <span class="text-xs text-gray-500 font-mono bg-gray-700/70 px-1.5 py-0.5 rounded">Kibana-aware</span>
+  <div class="flex-1"></div>
+  <div class="flex items-center gap-1.5">
+    <button onclick="formatJSON()" title="Ctrl+Enter"
+            class="bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs font-bold px-3 py-1.5 rounded transition-all">
+      Format
+    </button>
+    <button onclick="exportJSON()"
+            class="bg-purple-700 hover:bg-purple-600 active:scale-95 text-white text-xs font-semibold px-3 py-1.5 rounded transition-all">
+      Export
+    </button>
+    <button onclick="copyJSON()"
+            class="bg-indigo-700 hover:bg-indigo-600 active:scale-95 text-white text-xs font-semibold px-3 py-1.5 rounded transition-all">
+      Copy JSON
+    </button>
+    <div class="w-px h-5 bg-gray-600 mx-0.5"></div>
+    <button onclick="saveToLocal()"
+            class="bg-yellow-700 hover:bg-yellow-600 active:scale-95 text-white text-xs font-semibold px-3 py-1.5 rounded transition-all">
+      Save
+    </button>
+    <button onclick="loadFromLocal()"
+            class="bg-gray-700 hover:bg-gray-600 active:scale-95 text-white text-xs font-semibold px-3 py-1.5 rounded transition-all">
+      Load
+    </button>
+  </div>
+</header>
 
-    <div class="flex flex-wrap gap-4 mb-4">
-      <button onclick="formatJSON()" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-md">Format & Validate</button>
-      <button onclick="getJSON()" class="bg-green-600 hover:bg-green-700 text-white font-semibold px-4 py-2 rounded-md">Get JSON (Alert)</button>
-      <button onclick="exportJSON()" class="bg-purple-600 hover:bg-purple-700 text-white font-semibold px-4 py-2 rounded-md">Export JSON</button>
-      <button onclick="saveToLocal()" class="bg-yellow-600 hover:bg-yellow-700 text-white font-semibold px-4 py-2 rounded-md">Save to Local Storage</button>
-      <button onclick="loadFromLocal()" class="bg-gray-700 hover:bg-gray-800 text-white font-semibold px-4 py-2 rounded-md">Load from Local Storage</button>
-      <button onclick="copyFormatted()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2 rounded-md">Copy Formatted JSON</button>
+<!-- ── INFO SECTION (above editor, auto-height) ──────────────────────────────── -->
+<div id="info-section" class="hidden flex-shrink-0 border-b border-gray-700">
+
+  <!-- KIBANA BANNER — prominent trace search -->
+  <div id="kibana-banner" class="hidden px-4 py-3" style="background:linear-gradient(135deg,#1e1035,#2d1b69)">
+    <div class="flex items-center gap-2 mb-2.5">
+      <!-- Kibana-style search icon -->
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2.5" class="flex-shrink-0">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <span class="text-xs font-bold text-purple-300 uppercase tracking-widest">Kibana Trace Search</span>
     </div>
-
-    <pre id="output" class="bg-gray-100 p-4 rounded-md overflow-x-auto text-sm font-mono whitespace-pre-wrap border text-gray-800"></pre>
-    <div id="error" class="text-red-600 text-sm mt-2"></div>
+    <div id="kibana-links" class="flex flex-col gap-2"></div>
   </div>
 
-  <script>
-    const container = document.getElementById('editor');
-    const editor = new JSONEditor(container, {
-      mode: 'code',
-      modes: ['code', 'form', 'text', 'tree', 'view'],
-      onError: function (err) {
-        document.getElementById('error').textContent = err.toString();
+  <!-- REQUEST SUMMARY + HIGHLIGHTS -->
+  <div id="req-summary" class="hidden px-4 py-2 bg-gray-800 border-t border-gray-700/60">
+    <div id="req-summary-content" class="flex flex-wrap items-center gap-2"></div>
+  </div>
+
+  <div id="highlights" class="hidden px-4 py-3" style="background:rgba(15,23,42,.97)">
+    <div class="flex items-center justify-between mb-2">
+      <span class="text-xs font-bold text-slate-500 uppercase tracking-widest">Key Highlights</span>
+      <span class="text-xs text-slate-600 italic">Click badge to copy</span>
+    </div>
+    <div id="highlights-content" class="flex flex-wrap gap-1.5"></div>
+    <div id="device-info-section" class="hidden mt-2.5 pt-2.5 border-t border-slate-800">
+      <span class="text-xs font-bold text-amber-600 uppercase tracking-wide block mb-1.5">Device Details</span>
+      <div id="device-info-fields" class="flex flex-wrap gap-1.5"></div>
+    </div>
+  </div>
+
+</div><!-- /info-section -->
+
+<!-- ── MAIN (history + editor) ───────────────────────────────────────────────── -->
+<div class="flex flex-1" style="min-height:0;overflow:hidden">
+
+  <!-- HISTORY SIDEBAR -->
+  <aside id="hist-panel"
+         class="flex flex-col bg-gray-900 border-r border-gray-700 flex-shrink-0"
+         style="width:268px;min-width:268px;overflow:hidden">
+    <div class="flex items-center justify-between px-3 py-2 border-b border-gray-700 flex-shrink-0">
+      <div class="flex items-center gap-2">
+        <span class="text-xs font-bold text-gray-500 uppercase tracking-widest">History</span>
+        <span id="hist-count" class="text-xs font-mono text-gray-600 bg-gray-800 px-1.5 py-0.5 rounded-full">0</span>
+      </div>
+      <button onclick="clearHistory()" class="text-xs text-red-500 hover:text-red-400 transition-colors">Clear all</button>
+    </div>
+    <div id="hist-list" class="flex-1 overflow-y-auto p-1.5"></div>
+  </aside>
+
+  <!-- EDITOR PANE (fills remaining space) -->
+  <div class="flex flex-col flex-1" style="min-width:0;overflow:hidden">
+    <div class="flex items-center justify-between px-3 py-1.5 bg-gray-800 border-b border-gray-700 flex-shrink-0">
+      <span class="text-xs font-bold text-gray-500 uppercase tracking-widest">Editor</span>
+      <span class="text-xs text-gray-600 italic">Paste JSON — auto-formats instantly · Ctrl+Enter</span>
+    </div>
+    <div id="editor-container" class="flex-1" style="overflow:hidden;min-height:0"></div>
+    <div id="error" class="hidden text-red-400 text-xs font-mono px-3 py-2 bg-gray-800 border-t border-red-900/40 flex-shrink-0"></div>
+  </div>
+
+</div><!-- /main -->
+
+<!-- Toast -->
+<div id="toast"
+     class="fixed bottom-5 right-5 bg-gray-700 border border-gray-600 text-white px-4 py-2 rounded-lg shadow-2xl text-sm z-50 opacity-0 pointer-events-none transition-opacity duration-300">
+</div>
+
+<script>
+// ── Configuration ──────────────────────────────────────────────────────────────
+
+const SPECIAL_KEYS = {
+  platform:       { label: 'Platform',      cls: 'bg-purple-100 text-purple-800 border-purple-300' },
+  cif:            { label: 'CIF',           cls: 'bg-red-100    text-red-800    border-red-300'    },
+  app_version:    { label: 'App Version',   cls: 'bg-blue-100   text-blue-800   border-blue-300'   },
+  device_id:      { label: 'Device ID',     cls: 'bg-green-100  text-green-800  border-green-300'  },
+  device_info:    { label: 'Device Info',   cls: 'bg-amber-100  text-amber-800  border-amber-300'  },
+  correlation:    { label: 'Correlation',   cls: 'bg-orange-100 text-orange-800 border-orange-300' },
+  correctionid:   { label: 'Correction ID', cls: 'bg-orange-100 text-orange-800 border-orange-300' },
+  correction_id:  { label: 'Correction ID', cls: 'bg-orange-100 text-orange-800 border-orange-300' },
+  trace_id:       { label: 'Trace ID',      cls: 'bg-pink-100   text-pink-800   border-pink-300',   kibana: true },
+  'x-b3-traceid': { label: 'B3 Trace ID',  cls: 'bg-fuchsia-100 text-fuchsia-800 border-fuchsia-300', kibana: true },
+  user_id:        { label: 'User ID',       cls: 'bg-cyan-100   text-cyan-800   border-cyan-300'   },
+  channel:        { label: 'Channel',       cls: 'bg-teal-100   text-teal-800   border-teal-300'   },
+  api_code:       { label: 'API Code',      cls: 'bg-violet-100 text-violet-800 border-violet-300' },
+  os:             { label: 'OS',            cls: 'bg-slate-100  text-slate-700  border-slate-300'  },
+  language:       { label: 'Language',      cls: 'bg-lime-100   text-lime-800   border-lime-300'   },
+};
+
+const URL_KEYS    = new Set(['uri', 'url', 'request_uri', 'href', 'endpoint']);
+const METHOD_KEYS = new Set(['method', 'request_method']);
+const KIBANA_KEYS = new Set(['trace_id', 'x-b3-traceid']);
+
+function buildKibanaUrl(traceId) {
+  const today = new Date().toISOString().slice(0, 10);
+  return `https://kibana.hatthabank.com:8443/s/devspace/app/discover#/?_g=(filters:!(),refreshInterval:(pause:!t,value:0),time:(from:'${today}',to:now))&_a=(columns:!(APP-NAME,LOG,LOG-LEVEL,TRACE-ID),filters:!(),index:'72f13460-c881-11ed-be7d-e733c0d09ee8',interval:auto,query:(language:kuery,query:'TRACE-ID:${traceId}'),sort:!(!('@timestamp',desc)))`;
+}
+
+const _store = {};
+
+// ── Editor init ────────────────────────────────────────────────────────────────
+
+const editor = new JSONEditor(document.getElementById('editor-container'), {
+  mode:    'code',
+  modes:   ['code', 'form', 'text', 'tree', 'view'],
+  onError: err => showError(String(err)),
+});
+
+editor.set({ name: 'ChatGPT', type: 'AI', features: ['Edit', 'Export', 'Copy', 'Save'] });
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+function escapeHTML(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+let _toastTimer;
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.opacity = '1';
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.style.opacity = '0', 2200);
+}
+
+function showError(msg) {
+  const el = document.getElementById('error');
+  if (msg) { el.textContent = msg; el.classList.remove('hidden'); }
+  else     { el.textContent = '';  el.classList.add('hidden');    }
+}
+
+function copyFromStore(key, label) {
+  const val = _store[key];
+  if (val == null) return;
+  navigator.clipboard.writeText(String(val))
+    .then(() => showToast(label + ' copied!'))
+    .catch(e => alert('Copy failed: ' + e));
+}
+
+function unwrap(v)  { return Array.isArray(v) && v.length === 1 ? v[0] : v; }
+function tryJSON(s) { try { return JSON.parse(s); } catch { return null; } }
+
+// ── Key Extraction ─────────────────────────────────────────────────────────────
+
+function extractKV(obj, depth) {
+  if (depth === undefined) depth = 0;
+  if (!obj || typeof obj !== 'object' || depth > 7) return {};
+  const out = {};
+  for (const rawKey of Object.keys(obj)) {
+    const key = rawKey.toLowerCase();
+    const val = unwrap(obj[rawKey]);
+    const tracked =
+      SPECIAL_KEYS[key] != null || URL_KEYS.has(key) || METHOD_KEYS.has(key) ||
+      key === 'status' || key === 'type' || key === 'service' || key === 'duration';
+    if (tracked && !(key in out)) out[key] = val;
+    if (val && typeof val === 'object' && !Array.isArray(val)) {
+      const nested = extractKV(val, depth + 1);
+      for (const nk of Object.keys(nested)) { if (!(nk in out)) out[nk] = nested[nk]; }
+    }
+  }
+  return out;
+}
+
+// ── Render Info Section ────────────────────────────────────────────────────────
+
+function renderHighlights(json) {
+  const kv = extractKV(json);
+  Object.keys(_store).forEach(k => delete _store[k]);
+
+  let anyVisible = false;
+
+  // ── Kibana Banner ────────────────────────────────────────────────────────────
+  const kibanaBanner = document.getElementById('kibana-banner');
+  const kibanaLinks  = document.getElementById('kibana-links');
+  const traceEntries = [];
+
+  for (const key of KIBANA_KEYS) {
+    if (!(key in kv)) continue;
+    const raw = typeof kv[key] === 'string' ? kv[key] : String(kv[key]);
+    if (!raw) continue;
+    const label   = SPECIAL_KEYS[key]?.label || 'Trace ID';
+    const kStore  = 'kb_' + key;
+    _store[kStore] = raw;
+
+    traceEntries.push(`
+      <div class="flex items-center gap-2 flex-wrap">
+        <span class="text-xs font-semibold text-purple-400 w-20 shrink-0">${escapeHTML(label)}</span>
+        <code class="font-mono text-sm text-white bg-black/40 border border-purple-700/50 px-2.5 py-1 rounded flex-1 min-w-0 break-all">${escapeHTML(raw)}</code>
+        <button onclick="copyFromStore('${escapeHTML(kStore)}','${escapeHTML(label)}')"
+                class="text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 px-2.5 py-1 rounded whitespace-nowrap transition-colors flex-shrink-0">
+          Copy ID
+        </button>
+        <a href="${escapeHTML(buildKibanaUrl(raw))}" target="_blank" rel="noopener noreferrer"
+           class="flex items-center gap-1.5 text-xs bg-purple-600 hover:bg-purple-500 active:bg-purple-700 text-white px-3 py-1 rounded font-bold whitespace-nowrap transition-colors flex-shrink-0">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          Search in Kibana
+        </a>
+      </div>`);
+  }
+
+  if (traceEntries.length) {
+    kibanaLinks.innerHTML = traceEntries.join('<div class="h-px bg-purple-800/40 my-1"></div>');
+    kibanaBanner.classList.remove('hidden');
+    anyVisible = true;
+  } else {
+    kibanaBanner.classList.add('hidden');
+  }
+
+  // ── Request Summary ──────────────────────────────────────────────────────────
+  const summaryEl = document.getElementById('req-summary');
+  const parts     = [];
+
+  if (typeof kv.type === 'string') {
+    const c = { request:'bg-blue-600', response:'bg-emerald-600', event:'bg-purple-600' }[kv.type.toLowerCase()] || 'bg-gray-600';
+    parts.push(`<span class="inline-block ${c} text-white text-xs font-bold px-2 py-0.5 rounded uppercase tracking-wide">${escapeHTML(kv.type)}</span>`);
+  }
+
+  const method = kv.method || kv.request_method;
+  if (method) {
+    const mc = { GET:'bg-green-500', POST:'bg-blue-500', PUT:'bg-yellow-500', DELETE:'bg-red-500', PATCH:'bg-purple-500' };
+    const c  = mc[String(method).toUpperCase()] || 'bg-gray-500';
+    parts.push(`<span class="inline-block ${c} text-white text-xs font-bold px-2 py-0.5 rounded">${escapeHTML(String(method).toUpperCase())}</span>`);
+  }
+
+  if (kv.status !== undefined) {
+    const s = Number(kv.status);
+    const c = s>=500?'bg-red-600':s>=400?'bg-orange-500':s>=300?'bg-yellow-500':s>=200?'bg-green-600':'bg-gray-500';
+    parts.push(`<span class="inline-block ${c} text-white text-xs font-bold px-2 py-0.5 rounded">${escapeHTML(String(kv.status))}</span>`);
+  }
+
+  if (kv.service)          parts.push(`<span class="font-mono text-xs text-gray-300 bg-gray-700 border border-gray-600 px-2 py-0.5 rounded">${escapeHTML(String(kv.service))}</span>`);
+  if (kv.duration != null) parts.push(`<span class="text-gray-400 text-xs font-mono">${escapeHTML(String(kv.duration))}ms</span>`);
+  if (parts.length)        parts.push(`<span class="text-gray-600 select-none">|</span>`);
+
+  const urlKey = Array.from(URL_KEYS).find(k => kv[k] !== undefined);
+  if (urlKey) {
+    const uv   = String(kv[urlKey]);
+    const disp = uv.length > 120 ? uv.slice(0, 120) + '…' : uv;
+    const isH  = /^https?:\/\//i.test(uv);
+    parts.push(isH
+      ? `<a href="${escapeHTML(uv)}" target="_blank" rel="noopener" class="text-blue-400 hover:text-blue-300 text-xs font-mono break-all underline" title="${escapeHTML(uv)}">${escapeHTML(disp)}</a>`
+      : `<span class="text-gray-300 text-xs font-mono break-all" title="${escapeHTML(uv)}">${escapeHTML(disp)}</span>`);
+  }
+
+  if (parts.some(p => p.trim())) {
+    document.getElementById('req-summary-content').innerHTML = parts.join('');
+    summaryEl.classList.remove('hidden');
+    anyVisible = true;
+  } else {
+    summaryEl.classList.add('hidden');
+  }
+
+  // ── Key Highlight Badges ─────────────────────────────────────────────────────
+  const panel  = document.getElementById('highlights');
+  const badges = [];
+
+  for (const [key, cfg] of Object.entries(SPECIAL_KEYS)) {
+    if (!(key in kv) || KIBANA_KEYS.has(key)) continue; // Kibana keys have their own banner
+    const rawVal   = kv[key];
+    let displayVal = typeof rawVal === 'object' ? JSON.stringify(rawVal) : String(rawVal);
+    const fullVal  = displayVal;
+
+    if (key === 'device_info') {
+      const p = tryJSON(displayVal);
+      if (p) {
+        const model = p.device_model || p.model || '';
+        const osv   = String(p.os_version || '').replace(/^Version\s*/i,'').split(',')[0].trim();
+        displayVal  = [model, osv].filter(Boolean).join(' · ') || displayVal;
       }
+    }
+    if (['correlation','correctionid','correction_id'].includes(key) && displayVal.length > 24)
+      displayVal = displayVal.slice(0, 24) + '…';
+
+    const sk = 'badge_' + key;
+    _store[sk] = fullVal;
+    const trunc = displayVal.length > 42 ? displayVal.slice(0, 42) + '…' : displayVal;
+
+    badges.push(`
+      <div class="hl-badge border rounded-lg px-2.5 py-1 text-xs flex items-center gap-1.5 ${cfg.cls}"
+           title="${escapeHTML(fullVal)}"
+           onclick="copyFromStore('${escapeHTML(sk)}','${escapeHTML(cfg.label)}')">
+        <span class="font-bold opacity-60 shrink-0">${escapeHTML(cfg.label)}</span>
+        <span class="font-mono">${escapeHTML(trunc)}</span>
+      </div>`);
+  }
+
+  if (badges.length) {
+    document.getElementById('highlights-content').innerHTML = badges.join('');
+    panel.classList.remove('hidden');
+    anyVisible = true;
+  } else {
+    panel.classList.add('hidden');
+  }
+
+  // ── Device Info Sub-fields ───────────────────────────────────────────────────
+  const diSec  = document.getElementById('device-info-section');
+  const diFlds = document.getElementById('device-info-fields');
+  const diRaw  = kv.device_info;
+  const diP    = diRaw ? tryJSON(typeof diRaw === 'string' ? diRaw : JSON.stringify(diRaw)) : null;
+
+  if (diP && typeof diP === 'object') {
+    const sub = ['device_model','model','os_version','os_security_patch','board','hardware','product','host','serial'];
+    const sb  = sub.filter(f => diP[f] && String(diP[f]).trim()).map(f => {
+      const v    = String(diP[f]);
+      const lbl  = f.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase());
+      const dk   = 'di_' + f;
+      _store[dk] = v;
+      const trunc = v.length > 55 ? v.slice(0,55)+'…' : v;
+      return `<div class="hl-badge bg-amber-50 text-amber-900 border border-amber-200 rounded px-2 py-1 text-xs flex items-center gap-1.5"
+                   title="${escapeHTML(v)}" onclick="copyFromStore('${escapeHTML(dk)}','${escapeHTML(lbl)}')">
+                <span class="font-semibold opacity-60 shrink-0">${escapeHTML(lbl)}</span>
+                <span class="font-mono">${escapeHTML(trunc)}</span>
+              </div>`;
     });
+    if (sb.length) { diFlds.innerHTML = sb.join(''); diSec.classList.remove('hidden'); }
+    else           { diSec.classList.add('hidden'); }
+  } else {
+    diSec.classList.add('hidden');
+  }
 
-    // Set default JSON
-    editor.set({
-      name: "ChatGPT",
-      type: "AI",
-      features: ["Edit", "Export", "Copy", "Save"]
-    });
+  // Show/hide the entire info section
+  document.getElementById('info-section').classList.toggle('hidden', !anyVisible);
+}
 
-    function formatJSON() {
-      try {
-        const json = editor.get();
-        const pretty = JSON.stringify(json, null, 2);
-        document.getElementById('output').textContent = pretty;
-        document.getElementById('error').textContent = '';
-      } catch (e) {
-        document.getElementById('output').textContent = '';
-        document.getElementById('error').textContent = 'Error: ' + e.message;
-      }
+function hideInfoSection() {
+  ['info-section','kibana-banner','req-summary','highlights'].forEach(id =>
+    document.getElementById(id).classList.add('hidden'));
+}
+
+// ── History ────────────────────────────────────────────────────────────────────
+
+const HIST_KEY = 'jsonHistory';
+const HIST_MAX = 50;
+let _activeHistId  = null;
+let _histCollapsed = false;
+
+function getHistory()  { try { return JSON.parse(localStorage.getItem(HIST_KEY) || '[]'); } catch { return []; } }
+function saveHist(arr) { try { localStorage.setItem(HIST_KEY, JSON.stringify(arr)); } catch { showToast('Storage full.'); } }
+
+function makeHistLabel(json, kv) {
+  const method  = kv.method || kv.request_method || '';
+  const urlKey  = Array.from(URL_KEYS).find(k => kv[k] !== undefined);
+  const uri     = urlKey ? String(kv[urlKey]) : '';
+  const service = String(kv.service || '');
+  const type    = String(kv.type    || '');
+  const status  = kv.status != null ? String(kv.status) : '';
+  if (method && uri) {
+    const path  = uri.replace(/^https?:\/\/[^/]+/,'').split('?')[0];
+    const parts = path.split('/').filter(Boolean);
+    const short = parts.length > 3 ? '…/' + parts.slice(-2).join('/') : (path || uri);
+    return `${method.toUpperCase()} ${short}`;
+  }
+  if (status && service) return `${status} ← ${service}`;
+  if (type && service)   return `${type} (${service})`;
+  if (type)              return type;
+  return '{ ' + Object.keys(json).slice(0, 3).join(', ') + ' }';
+}
+
+function methodBg(m) {
+  return { GET:'#16a34a', POST:'#2563eb', PUT:'#d97706', DELETE:'#dc2626', PATCH:'#9333ea' }[m] || '#4b5563';
+}
+
+function timeAgo(iso) {
+  const d = Math.floor((Date.now() - new Date(iso)) / 1000);
+  if (d < 60)    return d + 's ago';
+  if (d < 3600)  return Math.floor(d / 60)   + 'm ago';
+  if (d < 86400) return Math.floor(d / 3600) + 'h ago';
+  return Math.floor(d / 86400) + 'd ago';
+}
+
+function renderHistory() {
+  const hist = getHistory();
+  const list = document.getElementById('hist-list');
+  document.getElementById('hist-count').textContent = hist.length;
+
+  if (!hist.length) {
+    list.innerHTML = `
+      <div class="flex flex-col items-center justify-center py-10 text-center px-4">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#374151" stroke-width="1.8" class="mb-3">
+          <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+        </svg>
+        <p class="text-xs text-gray-600 leading-relaxed">No history yet.<br>
+          <span class="text-gray-700">Paste JSON to start tracking.</span></p>
+      </div>`;
+    return;
+  }
+
+  list.innerHTML = hist.map(e => {
+    const isActive = e.id === _activeHistId;
+    const sc = e.status == null ? '' : e.status >= 500 ? 'text-red-400' : e.status >= 400 ? 'text-orange-400' : 'text-emerald-400';
+    const sub = [
+      e.cif    ? `CIF ${e.cif}`    : '',
+      e.uid    ? `UID ${e.uid}`    : '',
+      e.status != null ? String(e.status) : '',
+    ].filter(Boolean).join(' · ');
+
+    return `
+      <div class="hist-entry group flex items-start gap-2 px-2 py-2 rounded-lg cursor-pointer mb-0.5 ${isActive ? 'active' : ''}"
+           onclick="loadHistEntry(${e.id})">
+        <div class="flex-shrink-0 pt-0.5">
+          ${e.method
+            ? `<span class="inline-block text-white text-[10px] font-bold px-1.5 py-0.5 rounded leading-none" style="background:${methodBg(e.method)}">${escapeHTML(e.method.slice(0,6))}</span>`
+            : `<span class="inline-block w-8"></span>`}
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="text-xs font-mono text-gray-300 truncate leading-snug">${escapeHTML(e.label)}</div>
+          <div class="text-[11px] mt-0.5 text-gray-600 flex flex-wrap items-center gap-x-2">
+            ${sub ? `<span class="${sc}">${escapeHTML(sub)}</span>` : ''}
+            <span>${timeAgo(e.ts)}</span>
+          </div>
+        </div>
+        <button class="hist-del text-gray-700 hover:text-red-400 text-xs flex-shrink-0 transition-colors mt-0.5"
+                onclick="event.stopPropagation();delHistEntry(${e.id})" title="Remove">✕</button>
+      </div>`;
+  }).join('');
+}
+
+function addToHistory(json) {
+  const kv    = extractKV(json);
+  const entry = {
+    id:     Date.now(),
+    ts:     new Date().toISOString(),
+    label:  makeHistLabel(json, kv).slice(0, 70),
+    cif:    kv.cif     ? String(kv.cif)     : '',
+    uid:    kv.user_id ? String(kv.user_id) : '',
+    status: kv.status != null ? Number(kv.status) : null,
+    method: String(kv.method || kv.request_method || '').toUpperCase(),
+    json:   JSON.stringify(json),
+  };
+  const filtered = getHistory().filter(e => e.json !== entry.json);
+  filtered.unshift(entry);
+  saveHist(filtered.slice(0, HIST_MAX));
+  _activeHistId = entry.id;
+  renderHistory();
+}
+
+function loadHistEntry(id) {
+  const entry = getHistory().find(e => e.id === id);
+  if (!entry) return;
+  try {
+    _activeHistId = id;
+    editor.set(JSON.parse(entry.json));
+    formatJSON(false);
+    renderHistory();
+  } catch { showToast('Failed to load entry.'); }
+}
+
+function delHistEntry(id) {
+  saveHist(getHistory().filter(e => e.id !== id));
+  if (_activeHistId === id) _activeHistId = null;
+  renderHistory();
+}
+
+function clearHistory() {
+  saveHist([]); _activeHistId = null; renderHistory(); showToast('History cleared.');
+}
+
+function toggleHistory() {
+  _histCollapsed = !_histCollapsed;
+  document.getElementById('hist-panel').classList.toggle('collapsed', _histCollapsed);
+}
+
+// ── Core Actions ───────────────────────────────────────────────────────────────
+
+function formatJSON(addHist = true) {
+  try {
+    const json = editor.get();
+
+    // Format in the editor itself (pretty-print in code/text modes)
+    const mode = editor.getMode ? editor.getMode() : 'code';
+    if (mode === 'code' || mode === 'text') {
+      editor.set(json); // JSONEditor re-serialises as pretty JSON
     }
 
-    function getJSON() {
-      try {
-        const json = editor.get();
-        alert('Valid JSON:\n' + JSON.stringify(json, null, 2));
-      } catch (e) {
-        alert('Invalid JSON:\n' + e.message);
-      }
-    }
+    renderHighlights(json);
+    showError('');
+    if (addHist) addToHistory(json);
+  } catch (e) {
+    showError('Invalid JSON: ' + e.message);
+    hideInfoSection();
+  }
+}
 
-    function exportJSON() {
-      try {
-        const json = editor.get();
-        const blob = new Blob([JSON.stringify(json, null, 2)], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "data.json";
-        a.click();
-        URL.revokeObjectURL(url);
-      } catch (e) {
-        alert("Export failed: " + e.message);
-      }
-    }
+function exportJSON() {
+  try {
+    const blob = new Blob([JSON.stringify(editor.get(), null, 2)], { type: 'application/json' });
+    const url  = URL.createObjectURL(blob);
+    Object.assign(document.createElement('a'), { href: url, download: 'data.json' }).click();
+    URL.revokeObjectURL(url);
+  } catch (e) { alert('Export failed: ' + e.message); }
+}
 
-    function saveToLocal() {
-      try {
-        const json = editor.get();
-        localStorage.setItem("jsonData", JSON.stringify(json));
-        alert("JSON saved to local storage.");
-      } catch (e) {
-        alert("Save failed: " + e.message);
-      }
-    }
+function copyJSON() {
+  try {
+    navigator.clipboard.writeText(JSON.stringify(editor.get(), null, 2))
+      .then(() => showToast('JSON copied!'))
+      .catch(e => alert('Copy failed: ' + e));
+  } catch (e) { alert('Copy failed: ' + e.message); }
+}
 
-    function loadFromLocal() {
-      const json = localStorage.getItem("jsonData");
-      if (json) {
-        try {
-          editor.set(JSON.parse(json));
-          alert("JSON loaded from local storage.");
-        } catch (e) {
-          alert("Load failed: Invalid JSON in storage.");
-        }
-      } else {
-        alert("No saved JSON found in local storage.");
-      }
-    }
+function saveToLocal() {
+  try {
+    localStorage.setItem('jsonData', JSON.stringify(editor.get()));
+    showToast('Saved to local storage.');
+  } catch (e) { alert('Save failed: ' + e.message); }
+}
 
-    function copyFormatted() {
-      const output = document.getElementById('output').textContent;
-      if (!output.trim()) {
-        alert("Nothing to copy. Format the JSON first.");
-        return;
-      }
+function loadFromLocal() {
+  const raw = localStorage.getItem('jsonData');
+  if (!raw) { alert('No saved JSON found.'); return; }
+  try { editor.set(JSON.parse(raw)); formatJSON(false); showToast('Loaded.'); }
+  catch { alert('Load failed: invalid JSON in storage.'); }
+}
 
-      navigator.clipboard.writeText(output)
-        .then(() => alert("Formatted JSON copied to clipboard!"))
-        .catch(err => alert("Copy failed: " + err));
-    }
-  </script>
+// ── Auto-format on paste ───────────────────────────────────────────────────────
+
+let _pasteTimer;
+document.addEventListener('paste', e => {
+  const box = document.getElementById('editor-container');
+  if (!box.contains(e.target) && !box.contains(document.activeElement)) return;
+  clearTimeout(_pasteTimer);
+  _pasteTimer = setTimeout(formatJSON, 220);
+});
+
+// ── Keyboard shortcuts ─────────────────────────────────────────────────────────
+
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); formatJSON(); }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'h')     { e.preventDefault(); toggleHistory(); }
+});
+
+// ── Init ───────────────────────────────────────────────────────────────────────
+
+renderHistory();
+</script>
 </body>
 </html>
